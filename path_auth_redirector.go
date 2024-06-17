@@ -19,22 +19,32 @@ func CreateConfig() *Config {
 	}
 }
 
+type PathAuthRedirector struct {
+	next   http.Handler
+	config *Config
+}
+
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
-	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		regex := regexp.MustCompile(config.Regex)
-		matches := regex.FindStringSubmatch(req.URL.Path)
-		if len(matches) > 1 {
-			token := matches[1]
-			// Get the end position of the matched token in the URL path
-			startIndex := strings.Index(req.URL.Path, token)
-			endIndex := startIndex + len(token)
-			remainingPath := req.URL.Path[endIndex:]
-			req.Header.Set("Authorization", "Bearer "+token)
-			req.URL.Path = config.Redirect + remainingPath
-			next.ServeHTTP(rw, req)
-		} else {
-			// If there is no match, serve the request without redirection
-			next.ServeHTTP(rw, req)
-		}
-	}), nil
+	return &PathAuthRedirector{
+		next:   next,
+		config: config,
+	}, nil
+}
+
+func (p *PathAuthRedirector) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+	regex := regexp.MustCompile(p.config.Regex)
+	matches := regex.FindStringSubmatch(req.URL.Path)
+	if len(matches) > 1 {
+		token := matches[1]
+		// Get the end position of the matched token in the URL path
+		startIndex := strings.Index(req.URL.Path, token)
+		endIndex := startIndex + len(token)
+		remainingPath := req.URL.Path[endIndex:]
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.URL.Path = p.config.Redirect + remainingPath
+		p.next.ServeHTTP(rw, req)
+	} else {
+		// If there is no match, serve the request without redirection
+		p.next.ServeHTTP(rw, req)
+	}
 }
