@@ -7,14 +7,14 @@ import (
 )
 
 type Config struct {
-	Regex           string `json:"regex,omitempty"`
-	DefaultRedirect string `json:"defaultRedirect,omitempty"`
+	Regex    string `json:"regex,omitempty"`
+	Redirect string `json:"redirect,omitempty"`
 }
 
 func CreateConfig() *Config {
 	return &Config{
-		Regex:           "",
-		DefaultRedirect: "/",
+		Regex:    "",
+		Redirect: "/",
 	}
 }
 
@@ -27,7 +27,7 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 			req.Header.Set("Authorization", "Bearer "+token)
 			next.ServeHTTP(rw, req)
 		} else {
-			http.Redirect(rw, req, config.DefaultRedirect, http.StatusFound)
+			http.Redirect(rw, req, config.Redirect, http.StatusFound)
 		}
 	}), nil
 }

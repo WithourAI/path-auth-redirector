@@ -10,8 +10,8 @@ import (
 func TestMyPlugin(t *testing.T) {
 	// Create a new instance of the plugin with the desired configuration
 	config := &Config{
-		Regex:           "^/sk/(?P<token>[^/]+).*$",
-		DefaultRedirect: "/",
+		Regex:    "^/sk/(?P<token>[^/]+).*$",
+		Redirect: "/",
 	}
 	ctx := context.Background()
 	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {})
