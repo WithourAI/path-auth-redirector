@@ -1,0 +1,7 @@
+displayName: Path auth redirector middleware
+type: middleware
+iconPath: .assets/icon.png
+
+import: github.com/WithourAI/path-auth-redirector
+
+summary: ''
