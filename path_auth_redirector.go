@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"regexp"
+	"strings"
 )
 
 type Config struct {
@@ -14,7 +15,7 @@ type Config struct {
 func CreateConfig() *Config {
 	return &Config{
 		Regex:    "",
-		Redirect: "/",
+		Redirect: "",
 	}
 }
 
@@ -24,10 +25,16 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 		matches := regex.FindStringSubmatch(req.URL.Path)
 		if len(matches) > 1 {
 			token := matches[1]
+			// Get the end position of the matched token in the URL path
+			startIndex := strings.Index(req.URL.Path, token)
+			endIndex := startIndex + len(token)
+			remainingPath := req.URL.Path[endIndex:]
 			req.Header.Set("Authorization", "Bearer "+token)
+			req.URL.Path = config.Redirect + remainingPath
 			next.ServeHTTP(rw, req)
 		} else {
-			http.Redirect(rw, req, config.Redirect, http.StatusFound)
+			// If there is no match, serve the request without redirection
+			next.ServeHTTP(rw, req)
 		}
 	}), nil
 }
