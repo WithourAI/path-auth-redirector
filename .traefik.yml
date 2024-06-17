@@ -4,4 +4,4 @@ iconPath: .assets/icon.png
 
 import: github.com/WithourAI/path-auth-redirector
 
-summary: ''
+summary: 'A simple plugin to extract and assign authorisation header from request path '
