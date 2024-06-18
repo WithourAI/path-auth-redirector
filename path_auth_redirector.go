@@ -48,6 +48,7 @@ func (p *PathAuthRedirector) ServeHTTP(rw http.ResponseWriter, req *http.Request
 
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.URL.Path = p.config.Redirect + remainingPath
+		req.RequestURI = req.URL.Path
 		log.Printf("Modified request URL: %s\n", req.URL.Path)
 		log.Printf("Set Authorization header: Bearer %s\n", token)
 
