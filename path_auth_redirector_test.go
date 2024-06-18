@@ -63,4 +63,19 @@ func TestMyPlugin(t *testing.T) {
 	if req4.URL.Path != expectedPath4 {
 		t.Errorf("Unexpected request path. Got %s, expected %s", req4.URL.Path, expectedPath4)
 	}
+
+	req5, _ := http.NewRequest("GET", "/sk/sk-WHJajwidjldjjio289u90uaw/v1/chat/completions", nil)
+	rw5 := httptest.NewRecorder()
+	handler.ServeHTTP(rw5, req5)
+	if rw5.Code != http.StatusOK {
+		t.Errorf("Unexpected status code. Got %d, expected %d", rw5.Code, http.StatusOK)
+	}
+	expectedAuthHeader5 := "Bearer sk-WHJajwidjldjjio289u90uaw"
+	if req5.Header.Get("Authorization") != expectedAuthHeader5 {
+		t.Errorf("Unexpected Authorization header. Got %s, expected %s", req5.Header.Get("Authorization"), expectedAuthHeader5)
+	}
+	expectedPath5 := "/v1/chat/completions"
+	if req5.URL.Path != expectedPath5 {
+		t.Errorf("Unexpected request path. Got %s, expected %s", req5.URL.Path, expectedPath5)
+	}
 }
