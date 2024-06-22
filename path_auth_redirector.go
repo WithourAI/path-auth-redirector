@@ -2,7 +2,6 @@ package path_auth_redirector
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"regexp"
@@ -45,20 +44,27 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 }
 
 func (p *PathAuthRedirector) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	matches := p.regex.FindStringSubmatch(req.URL.Path)
-	if len(matches) > 1 {
-		token := matches[1]
-		log.Printf("Extracted token: %s\n", token)
+	match := p.regex.FindStringSubmatch(req.URL.Path)
+	if match != nil {
+		// Get the index of the token capture group
+		tokenIndex := p.regex.SubexpIndex("token")
 
 		// Replace the matched part with the replacement
 		newPath := p.regex.ReplaceAllString(req.URL.Path, p.config.Replacement)
 		log.Printf("Modified request URL: %s\n", newPath)
 
-		// Set the header with the extracted token, including the prefix if specified
-		headerValue := token
-		if p.config.HeaderPrefix != "" {
-			headerValue = fmt.Sprintf("%s%s", p.config.HeaderPrefix, token)
+		// Set the header
+		var headerValue string
+		if tokenIndex != -1 && match[tokenIndex] != "" {
+			// We have a token, concatenate it with the prefix
+			token := match[tokenIndex]
+			log.Printf("Extracted token: %s\n", token)
+			headerValue = p.config.HeaderPrefix + token
+		} else {
+			// No token, just use the HeaderPrefix
+			headerValue = p.config.HeaderPrefix
 		}
+
 		req.Header.Set(p.config.HeaderName, headerValue)
 		log.Printf("Set %s header: %s\n", p.config.HeaderName, headerValue)
 

@@ -10,4 +10,4 @@ testData:
   regex: "/sk/(?P<token>[^/]+)(.*)"
   replacement: "$2"
   headerName: "Authorization"
-  HeaderPrefix: "Bearer "
+  headerPrefix: "Bearer "
