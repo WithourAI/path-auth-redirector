@@ -2,80 +2,122 @@ package path_auth_redirector
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 )
 
-func TestMyPlugin(t *testing.T) {
+func TestPathAuthRedirector(t *testing.T) {
 	// Create a new instance of the plugin with the desired configuration
 	config := &Config{
-		Regex:    "^/sk/(?P<token>[^/]+).*",
-		Redirect: "",
+		Regex:        `/sk/(?P<token>[^/]+)(.*)`,
+		Replacement:  "$2",
+		HeaderName:   "Authorization",
+		HeaderPrefix: "Bearer ",
 	}
+
 	ctx := context.Background()
-	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {})
-	handler, err := New(ctx, next, config, "my-plugin")
+	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		log.Printf("Next handler called with path: %s\n", req.URL.Path)
+	})
+
+	handler, err := New(ctx, next, config, "path-auth-redirector")
 	if err != nil {
 		t.Fatalf("Failed to create plugin: %v", err)
 	}
 
-	// Test case 1: Valid token in the request path
-	req1, _ := http.NewRequest("GET", "/sk/validtoken123/resource", nil)
-	rw1 := httptest.NewRecorder()
-	handler.ServeHTTP(rw1, req1)
-	if rw1.Code != http.StatusOK {
-		t.Errorf("Unexpected status code. Got %d, expected %d", rw1.Code, http.StatusOK)
-	}
-	expectedAuthHeader1 := "Bearer validtoken123"
-	if req1.Header.Get("Authorization") != expectedAuthHeader1 {
-		t.Errorf("Unexpected Authorization header. Got %s, expected %s", req1.Header.Get("Authorization"), expectedAuthHeader1)
-	}
-	expectedPath1 := "/resource"
-	if req1.URL.Path != expectedPath1 {
-		t.Errorf("Unexpected request path. Got %s, expected %s", req1.URL.Path, expectedPath1)
+	testCases := []struct {
+		name           string
+		path           string
+		expectedStatus int
+		expectedHeader string
+		expectedPath   string
+	}{
+		{
+			name:           "Valid token in request path",
+			path:           "/sk/validtoken123/resource",
+			expectedStatus: http.StatusOK,
+			expectedHeader: "Bearer validtoken123",
+			expectedPath:   "/resource",
+		},
+		{
+			name:           "Invalid request path",
+			path:           "/invalid/path",
+			expectedStatus: http.StatusOK,
+			expectedHeader: "",
+			expectedPath:   "/invalid/path",
+		},
+		{
+			name:           "URL with any string token",
+			path:           "/sk/anytoken456/endpoint",
+			expectedStatus: http.StatusOK,
+			expectedHeader: "Bearer anytoken456",
+			expectedPath:   "/endpoint",
+		},
+		{
+			name:           "URL with OpenAI-like token",
+			path:           "/sk/sk-WHJajwidjldjjio289u90uaw/v1/chat/completions",
+			expectedStatus: http.StatusOK,
+			expectedHeader: "Bearer sk-WHJajwidjldjjio289u90uaw",
+			expectedPath:   "/v1/chat/completions",
+		},
+		{
+			name:           "URL with token containing special characters",
+			path:           "/sk/" + url.PathEscape("sk_test_51AB-cD!ef@gh#ij$kl%mn^op") + "/v1/tokens",
+			expectedStatus: http.StatusOK,
+			expectedHeader: "Bearer sk_test_51AB-cD!ef@gh#ij$kl%mn^op",
+			expectedPath:   "/v1/tokens",
+		},
+		{
+			name:           "URL not starting with /sk",
+			path:           "/batch/sk/sk-114514/v1/chat",
+			expectedStatus: http.StatusOK,
+			expectedHeader: "Bearer sk-114514",
+			expectedPath:   "/batch/v1/chat",
+		},
+		{
+			name:           "URL with token and query parameters",
+			path:           "/sk/token789/api?param1=value1&param2=value2",
+			expectedStatus: http.StatusOK,
+			expectedHeader: "Bearer token789",
+			expectedPath:   "/api",
+		},
+		{
+			name:           "URL with multiple path segments after token",
+			path:           "/sk/multitoken/segment1/segment2/segment3",
+			expectedStatus: http.StatusOK,
+			expectedHeader: "Bearer multitoken",
+			expectedPath:   "/segment1/segment2/segment3",
+		},
 	}
 
-	// Test case 2: Invalid request path
-	req2, _ := http.NewRequest("GET", "/invalid/path", nil)
-	rw2 := httptest.NewRecorder()
-	handler.ServeHTTP(rw2, req2)
-	if rw2.Code != http.StatusOK {
-		t.Errorf("Unexpected status code. Got %d, expected %d", rw2.Code, http.StatusOK)
-	}
-	expectedRedirectURL2 := "/invalid/path"
-	if req2.URL.Path != expectedRedirectURL2 {
-		t.Errorf("Unexpected redirect URL. Got %s, expected %s", rw2.Header().Get("Location"), expectedRedirectURL2)
-	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req, err := http.NewRequest("GET", tc.path, nil)
+			if err != nil {
+				t.Fatalf("Failed to create request: %v", err)
+			}
 
-	// Test case 3: URL with any string token
-	req4, _ := http.NewRequest("GET", "/sk/anytoken456/endpoint", nil)
-	rw4 := httptest.NewRecorder()
-	handler.ServeHTTP(rw4, req4)
-	if rw4.Code != http.StatusOK {
-		t.Errorf("Unexpected status code. Got %d, expected %d", rw4.Code, http.StatusOK)
-	}
-	expectedAuthHeader4 := "Bearer anytoken456"
-	if req4.Header.Get("Authorization") != expectedAuthHeader4 {
-		t.Errorf("Unexpected Authorization header. Got %s, expected %s", req4.Header.Get("Authorization"), expectedAuthHeader4)
-	}
-	expectedPath4 := "/endpoint"
-	if req4.URL.Path != expectedPath4 {
-		t.Errorf("Unexpected request path. Got %s, expected %s", req4.URL.Path, expectedPath4)
-	}
+			rw := httptest.NewRecorder()
+			log.Printf("Running test case: %s\n", tc.name)
 
-	req5, _ := http.NewRequest("GET", "/sk/sk-WHJajwidjldjjio289u90uaw/v1/chat/completions", nil)
-	rw5 := httptest.NewRecorder()
-	handler.ServeHTTP(rw5, req5)
-	if rw5.Code != http.StatusOK {
-		t.Errorf("Unexpected status code. Got %d, expected %d", rw5.Code, http.StatusOK)
-	}
-	expectedAuthHeader5 := "Bearer sk-WHJajwidjldjjio289u90uaw"
-	if req5.Header.Get("Authorization") != expectedAuthHeader5 {
-		t.Errorf("Unexpected Authorization header. Got %s, expected %s", req5.Header.Get("Authorization"), expectedAuthHeader5)
-	}
-	expectedPath5 := "/v1/chat/completions"
-	if req5.URL.Path != expectedPath5 {
-		t.Errorf("Unexpected request path. Got %s, expected %s", req5.URL.Path, expectedPath5)
+			handler.ServeHTTP(rw, req)
+
+			if rw.Code != tc.expectedStatus {
+				t.Errorf("Unexpected status code. Got %d, expected %d", rw.Code, tc.expectedStatus)
+			}
+
+			if req.Header.Get("Authorization") != tc.expectedHeader {
+				t.Errorf("Unexpected Authorization header. Got %s, expected %s", req.Header.Get("Authorization"), tc.expectedHeader)
+			}
+
+			if req.URL.Path != tc.expectedPath {
+				t.Errorf("Unexpected request path. Got %s, expected %s", req.URL.Path, tc.expectedPath)
+			}
+
+			log.Printf("Test case completed: %s\n", tc.name)
+		})
 	}
 }

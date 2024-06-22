@@ -2,58 +2,69 @@ package path_auth_redirector
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"regexp"
-	"strings"
 )
 
 type Config struct {
-	Regex    string `json:"regex,omitempty"`
-	Redirect string `json:"redirect,omitempty"`
+	Regex        string `json:"regex,omitempty"`
+	Replacement  string `json:"replacement,omitempty"`
+	HeaderName   string `json:"headerName,omitempty"`
+	HeaderPrefix string `json:"headerPrefix,omitempty"`
 }
 
 func CreateConfig() *Config {
 	return &Config{
-		Regex:    "",
-		Redirect: "",
+		Regex:        "",
+		Replacement:  "",
+		HeaderName:   "",
+		HeaderPrefix: "",
 	}
 }
 
 type PathAuthRedirector struct {
 	next   http.Handler
 	config *Config
+	regex  *regexp.Regexp
 }
 
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
-	log.Printf("Initializing PathAuthRedirector with regex: %s and redirect: %s\n", config.Regex, config.Redirect)
+	log.Printf("Initializing PathAuthRedirector with regex: %s, replacement: %s, headerName: %s, and headerPrefix: %s\n",
+		config.Regex, config.Replacement, config.HeaderName, config.HeaderPrefix)
+	regex, err := regexp.Compile(config.Regex)
+	if err != nil {
+		return nil, err
+	}
 	return &PathAuthRedirector{
 		next:   next,
 		config: config,
+		regex:  regex,
 	}, nil
 }
 
 func (p *PathAuthRedirector) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	regex := regexp.MustCompile(p.config.Regex)
-	matches := regex.FindStringSubmatch(req.URL.Path)
+	matches := p.regex.FindStringSubmatch(req.URL.Path)
 	if len(matches) > 1 {
 		token := matches[1]
 		log.Printf("Extracted token: %s\n", token)
 
-		// Get the end position of the matched token in the URL path
-		startIndex := strings.Index(req.URL.Path, token)
-		endIndex := startIndex + len(token)
-		remainingPath := req.URL.Path[endIndex:]
-		log.Printf("Remaining path after token: %s\n", remainingPath)
+		// Replace the matched part with the replacement
+		newPath := p.regex.ReplaceAllString(req.URL.Path, p.config.Replacement)
+		log.Printf("Modified request URL: %s\n", newPath)
 
-		req.Header.Set("Authorization", "Bearer "+token)
-		req.URL.Path = p.config.Redirect + remainingPath
-		req.RequestURI = req.URL.Path
-		log.Printf("Modified request URL: %s\n", req.URL.Path)
-		log.Printf("Set Authorization header: Bearer %s\n", token)
+		// Set the header with the extracted token, including the prefix if specified
+		headerValue := token
+		if p.config.HeaderPrefix != "" {
+			headerValue = fmt.Sprintf("%s%s", p.config.HeaderPrefix, token)
+		}
+		req.Header.Set(p.config.HeaderName, headerValue)
+		log.Printf("Set %s header: %s\n", p.config.HeaderName, headerValue)
 
-		p.next.ServeHTTP(rw, req)
-	} else {
-		p.next.ServeHTTP(rw, req)
+		// Update the request URL
+		req.URL.Path = newPath
+		req.RequestURI = newPath
 	}
+	p.next.ServeHTTP(rw, req)
 }
